@@ -155,7 +155,7 @@ cargo check --manifest-path src-tauri/Cargo.toml
 ```bash
 npm run tauri:build
 ```
-
+chat_tool/src-tauri/target/release/bundle/dmg
 ## 常见问题
 
 如果提示 `npm: command not found`，说明 Node.js 没装好：
