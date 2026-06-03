@@ -141,6 +141,18 @@ fn app_settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(config_dir.join("app-settings.json"))
 }
 
+fn legacy_app_config_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Some(home) = std::env::var_os("HOME") {
+        let app_support = PathBuf::from(home).join("Library/Application Support");
+        dirs.push(app_support.join("com.local.iChat"));
+        dirs.push(app_support.join("com.local.chat-tool"));
+    }
+
+    dirs
+}
+
 fn load_config(app: &tauri::AppHandle) -> Result<AppConfig, String> {
     let paths = config_paths(app)?;
     let mut errors = Vec::new();
@@ -197,6 +209,9 @@ fn config_paths(app: &tauri::AppHandle) -> Result<Vec<PathBuf>, String> {
     }
 
     paths.push(app_config_path(app)?);
+    for dir in legacy_app_config_dirs() {
+        paths.push(dir.join("config.json"));
+    }
     Ok(paths)
 }
 
@@ -210,6 +225,9 @@ fn settings_paths(app: &tauri::AppHandle) -> Result<Vec<PathBuf>, String> {
     }
 
     paths.push(app_settings_path(app)?);
+    for dir in legacy_app_config_dirs() {
+        paths.push(dir.join("app-settings.json"));
+    }
     Ok(paths)
 }
 
@@ -545,7 +563,8 @@ pub fn run() {
                 error
             })?;
 
-            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon_lit.png"))?;
+            let tray_icon =
+                tauri::image::Image::from_bytes(include_bytes!("../icons/menubar-template.png"))?;
             let open_settings_item =
                 MenuItem::with_id(app, "open-settings", "打开设置", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;

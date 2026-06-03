@@ -1,5 +1,5 @@
 [package]
-name = "iChat"
+name = "ichat"
 version = "0.1.0"
 description = "A minimal desktop Q&A helper."
 authors = ["rocoo"]
