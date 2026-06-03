@@ -1,4 +1,4 @@
-# Chat Tool
+# iChat
 
 一个极简 macOS 桌面问答工具。主窗口是无边框浮窗，输入问题回车后调用兼容 OpenAI 的 `/chat/completions` 接口，并显示问题和回答。
 
@@ -12,6 +12,7 @@
 - 独立设置窗口
 - API、快捷键、Prompt 设置
 - 隐藏 Dock 图标
+- 可选菜单栏图标
 - 开机自启
 - macOS 无边框透明主窗口
 
@@ -118,7 +119,8 @@ cp app-settings.example.json app-settings.json
   "global_shortcut": "CommandOrControl+Shift+Space",
   "prompt": "",
   "hide_dock_icon": false,
-  "launch_at_login": false
+  "launch_at_login": false,
+  "show_menu_bar_icon": false
 }
 ```
 
@@ -184,7 +186,6 @@ macOS 无边框透明主窗口启用了 Tauri 的 `macos-private-api` feature。
 
 ## 后续待补
 
-- 菜单栏入口
 - 历史记录本地数据库
 - Windows 验证和打包
 # AI_chat_tool

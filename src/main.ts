@@ -34,6 +34,9 @@ const globalShortcutInput = document.querySelector<HTMLInputElement>(
 );
 const hideDockIconInput = document.querySelector<HTMLInputElement>("#hide-dock-icon-input");
 const launchAtLoginInput = document.querySelector<HTMLInputElement>("#launch-at-login-input");
+const showMenuBarIconInput = document.querySelector<HTMLInputElement>(
+  "#show-menu-bar-icon-input",
+);
 const promptInput = document.querySelector<HTMLTextAreaElement>("#prompt-input");
 const apiSettingsStatus = document.querySelector<HTMLElement>("#api-settings-status");
 const shortcutSettingsStatus = document.querySelector<HTMLElement>(
@@ -57,6 +60,7 @@ type ShortcutResponse = {
   global_shortcut: string;
   hide_dock_icon: boolean;
   launch_at_login: boolean;
+  show_menu_bar_icon: boolean;
 };
 
 type PromptResponse = {
@@ -125,7 +129,14 @@ async function loadApiSettings() {
 }
 
 async function loadShortcutSettings() {
-  if (!globalShortcutInput || !hideDockIconInput || !launchAtLoginInput) return;
+  if (
+    !globalShortcutInput ||
+    !hideDockIconInput ||
+    !launchAtLoginInput ||
+    !showMenuBarIconInput
+  ) {
+    return;
+  }
 
   if (shortcutSettingsStatus) shortcutSettingsStatus.textContent = "";
 
@@ -134,10 +145,12 @@ async function loadShortcutSettings() {
     globalShortcutInput.value = settings.global_shortcut;
     hideDockIconInput.checked = settings.hide_dock_icon;
     launchAtLoginInput.checked = settings.launch_at_login;
+    showMenuBarIconInput.checked = settings.show_menu_bar_icon;
   } catch {
     globalShortcutInput.value = "CommandOrControl+Shift+Space";
     hideDockIconInput.checked = false;
     launchAtLoginInput.checked = false;
+    showMenuBarIconInput.checked = false;
   }
 }
 
@@ -210,7 +223,13 @@ apiSettingsForm?.addEventListener("submit", async (event) => {
 shortcutSettingsForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  if (!globalShortcutInput || !hideDockIconInput || !launchAtLoginInput || !shortcutSettingsStatus) {
+  if (
+    !globalShortcutInput ||
+    !hideDockIconInput ||
+    !launchAtLoginInput ||
+    !showMenuBarIconInput ||
+    !shortcutSettingsStatus
+  ) {
     return;
   }
 
@@ -222,6 +241,7 @@ shortcutSettingsForm?.addEventListener("submit", async (event) => {
         global_shortcut: globalShortcutInput.value,
         hide_dock_icon: hideDockIconInput.checked,
         launch_at_login: launchAtLoginInput.checked,
+        show_menu_bar_icon: showMenuBarIconInput.checked,
       },
     });
     shortcutSettingsStatus.textContent = "已保存";

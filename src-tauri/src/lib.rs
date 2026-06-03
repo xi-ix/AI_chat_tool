@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     time::{Duration, SystemTime},
 };
-use tauri::Manager;
+use tauri::{Manager, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -30,6 +30,8 @@ struct AppSettings {
     hide_dock_icon: bool,
     #[serde(default)]
     launch_at_login: bool,
+    #[serde(default)]
+    show_menu_bar_icon: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,6 +58,8 @@ struct SaveShortcutRequest {
     hide_dock_icon: bool,
     #[serde(rename = "launch_at_login")]
     launch_at_login: bool,
+    #[serde(rename = "show_menu_bar_icon")]
+    show_menu_bar_icon: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -63,6 +67,7 @@ struct ShortcutResponse {
     global_shortcut: String,
     hide_dock_icon: bool,
     launch_at_login: bool,
+    show_menu_bar_icon: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -217,6 +222,7 @@ fn load_app_settings(app: &tauri::AppHandle) -> Result<AppSettings, String> {
         prompt: String::new(),
         hide_dock_icon: false,
         launch_at_login: false,
+        show_menu_bar_icon: false,
     })
 }
 
@@ -261,6 +267,15 @@ fn apply_autostart(app: &tauri::AppHandle, launch_at_login: bool) -> Result<(), 
         app.autolaunch()
             .disable()
             .map_err(|error| format!("关闭开机自启失败: {error}"))
+    }
+}
+
+fn apply_menu_bar_icon(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_visible(visible)
+            .map_err(|error| format!("设置菜单栏图标显示状态失败: {error}"))
+    } else {
+        Err("找不到菜单栏图标".to_string())
     }
 }
 
@@ -373,6 +388,7 @@ fn get_shortcut_settings(app: tauri::AppHandle) -> Result<ShortcutResponse, Stri
         global_shortcut: settings.global_shortcut,
         hide_dock_icon: settings.hide_dock_icon,
         launch_at_login: settings.launch_at_login,
+        show_menu_bar_icon: settings.show_menu_bar_icon,
     })
 }
 
@@ -389,6 +405,7 @@ fn save_shortcut_settings(
     register_global_shortcut(&app, shortcut)?;
     apply_dock_visibility(&app, settings.hide_dock_icon)?;
     apply_autostart(&app, settings.launch_at_login)?;
+    apply_menu_bar_icon(&app, settings.show_menu_bar_icon)?;
     let current = load_app_settings(&app)?;
     save_app_settings(
         &app,
@@ -397,6 +414,7 @@ fn save_shortcut_settings(
             prompt: current.prompt,
             hide_dock_icon: settings.hide_dock_icon,
             launch_at_login: settings.launch_at_login,
+            show_menu_bar_icon: settings.show_menu_bar_icon,
         },
     )
 }
@@ -420,6 +438,7 @@ fn save_prompt_settings(app: tauri::AppHandle, settings: SavePromptRequest) -> R
             prompt: settings.prompt.trim().to_string(),
             hide_dock_icon: current.hide_dock_icon,
             launch_at_login: current.launch_at_login,
+            show_menu_bar_icon: current.show_menu_bar_icon,
         },
     )
 }
@@ -510,7 +529,7 @@ pub fn run() {
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
             )
-            .title("Chat Tool")
+            .title("iChat")
             .inner_size(640.0, 140.0)
             .resizable(true)
             .decorations(false)
@@ -522,10 +541,29 @@ pub fn run() {
                 error
             })?;
 
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon_lit.png"))?;
+            TrayIconBuilder::with_id("main-tray")
+                .icon(tray_icon)
+                .icon_as_template(true)
+                .tooltip("iChat")
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let _ = show_main_window(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+
             let settings = load_app_settings(app.handle())?;
             register_global_shortcut(app.handle(), &settings.global_shortcut)?;
             apply_dock_visibility(app.handle(), settings.hide_dock_icon)?;
             apply_autostart(app.handle(), settings.launch_at_login)?;
+            apply_menu_bar_icon(app.handle(), settings.show_menu_bar_icon)?;
 
             Ok(())
         })

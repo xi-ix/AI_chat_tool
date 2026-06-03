@@ -2,5 +2,6 @@
   "global_shortcut": "CommandOrControl+Shift+Space",
   "prompt": "",
   "hide_dock_icon": false,
-  "launch_at_login": false
+  "launch_at_login": false,
+  "show_menu_bar_icon": false
 }
