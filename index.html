@@ -1,0 +1,114 @@
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Tool</title>
+  </head>
+  <body>
+    <main id="chat-view" class="app-shell">
+      <div class="drag-strip" data-tauri-drag-region></div>
+      <form id="ask-form" class="ask-form">
+        <input
+          id="question-input"
+          class="question-input"
+          name="question"
+          type="text"
+          autocomplete="off"
+          placeholder="问点什么..."
+          autofocus
+        />
+        <button
+          id="settings-button"
+          class="icon-button"
+          type="button"
+          aria-label="设置"
+          title="设置"
+        >
+          ⚙
+        </button>
+      </form>
+      <section id="answer-panel" class="answer-panel" hidden>
+        <div id="question-text" class="question-text"></div>
+        <div id="status-text" class="status-text"></div>
+        <pre id="answer-text" class="answer-text"></pre>
+      </section>
+    </main>
+    <main id="settings-view" class="settings-shell" hidden>
+      <div class="settings-header">
+        <h2>设置</h2>
+      </div>
+      <div class="settings-switcher">
+        <button id="api-page-button" class="switch-button is-active" type="button">API</button>
+        <button id="shortcut-page-button" class="switch-button" type="button">快捷键</button>
+        <button id="prompt-page-button" class="switch-button" type="button">Prompt</button>
+      </div>
+      <section id="api-settings-page">
+        <form id="api-settings-form" class="settings-form">
+          <label class="field">
+            <span>API Key</span>
+            <input id="api-key-input" type="password" placeholder="sk-..." />
+          </label>
+          <label class="field">
+            <span>Base URL</span>
+            <input id="base-url-input" type="url" placeholder="https://api.openai.com/v1" />
+          </label>
+          <label class="field">
+            <span>Model</span>
+            <input id="model-input" type="text" placeholder="gpt-4o-mini" />
+          </label>
+          <div id="api-settings-status" class="settings-status"></div>
+          <div class="settings-actions">
+            <button id="api-settings-cancel" class="secondary-button" type="button">取消</button>
+            <button class="primary-button" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+      <section id="shortcut-settings-page" hidden>
+        <form id="shortcut-settings-form" class="settings-form">
+          <label class="field">
+            <span>唤出窗口</span>
+            <input
+              id="global-shortcut-input"
+              type="text"
+              placeholder="CommandOrControl+Shift+Space"
+            />
+          </label>
+          <label class="checkbox-field">
+            <input id="hide-dock-icon-input" type="checkbox" />
+            <span>隐藏 Dock 图标</span>
+          </label>
+          <label class="checkbox-field">
+            <input id="launch-at-login-input" type="checkbox" />
+            <span>开机自启</span>
+          </label>
+          <div id="shortcut-settings-status" class="settings-status"></div>
+          <div class="settings-actions">
+            <button id="shortcut-settings-cancel" class="secondary-button" type="button">
+              取消
+            </button>
+            <button class="primary-button" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+      <section id="prompt-settings-page" hidden>
+        <form id="prompt-settings-form" class="settings-form">
+          <label class="field">
+            <span>System Prompt</span>
+            <textarea
+              id="prompt-input"
+              class="prompt-input"
+              placeholder="例如：你是一个简洁、准确的中文助手。"
+            ></textarea>
+          </label>
+          <div id="prompt-settings-status" class="settings-status"></div>
+          <div class="settings-actions">
+            <button id="prompt-settings-cancel" class="secondary-button" type="button">
+              取消
+            </button>
+            <button class="primary-button" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
