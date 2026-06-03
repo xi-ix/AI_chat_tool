@@ -1,7 +1,7 @@
 {
   "global_shortcut": "shift+option+K",
   "prompt": "用简洁的中文回答我的问题",
-  "hide_dock_icon": false,
-  "launch_at_login": false,
+  "hide_dock_icon": true,
+  "launch_at_login": true,
   "show_menu_bar_icon": true
 }

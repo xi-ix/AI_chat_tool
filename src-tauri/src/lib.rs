@@ -7,7 +7,11 @@ use std::{
     path::PathBuf,
     time::{Duration, SystemTime},
 };
-use tauri::{Manager, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}};
+use tauri::{
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager,
+};
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -542,11 +546,27 @@ pub fn run() {
             })?;
 
             let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon_lit.png"))?;
+            let open_settings_item =
+                MenuItem::with_id(app, "open-settings", "打开设置", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let tray_menu = Menu::with_items(app, &[&open_settings_item, &separator, &quit_item])?;
+
             TrayIconBuilder::with_id("main-tray")
                 .icon(tray_icon)
                 .icon_as_template(true)
                 .tooltip("iChat")
+                .menu(&tray_menu)
                 .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "open-settings" => {
+                        let _ = open_settings_window(app.clone());
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
