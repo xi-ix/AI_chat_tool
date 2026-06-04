@@ -79,7 +79,7 @@ body {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: none;
-  max-height: min(62vh, var(--answer-max-height));
+  max-height: var(--answer-max-height);
   overflow: auto;
 }
 

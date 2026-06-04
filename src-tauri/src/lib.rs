@@ -9,6 +9,7 @@ use std::{
 };
 use tauri::{
     Emitter,
+    LogicalPosition,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
@@ -518,7 +519,7 @@ fn save_appearance_settings(
 ) -> Result<(), String> {
     let current = load_app_settings(&app)?;
     let window_width = settings.window_width.clamp(480.0, 980.0);
-    let answer_max_height = settings.answer_max_height.clamp(240.0, 720.0);
+    let answer_max_height = settings.answer_max_height.clamp(240.0, 1400.0);
 
     save_app_settings(
         &app,
@@ -540,12 +541,50 @@ fn resize_main_window(app: tauri::AppHandle, height: f64) -> Result<(), String> 
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;
-    let height = height.clamp(140.0, 760.0);
+    let max_height = (settings.answer_max_height + 220.0).clamp(360.0, 1600.0);
+    let height = height.clamp(140.0, max_height);
     let width = settings.window_width.clamp(480.0, 980.0);
 
     window
         .set_size(tauri::LogicalSize::new(width, height))
         .map_err(|error| format!("调整窗口大小失败: {error}"))
+}
+
+#[tauri::command]
+fn center_main_window_on_answer(app: tauri::AppHandle, answer_center_y: f64) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "找不到主窗口".to_string())?;
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let position = window
+        .outer_position()
+        .map_err(|error| format!("读取窗口位置失败: {error}"))?;
+    let size = window
+        .outer_size()
+        .map_err(|error| format!("读取窗口大小失败: {error}"))?;
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| format!("读取屏幕信息失败: {error}"))?
+        .ok_or_else(|| "找不到当前屏幕".to_string())?;
+    let work_area = monitor.work_area();
+    let work_x = work_area.position.x as f64 / scale_factor;
+    let work_y = work_area.position.y as f64 / scale_factor;
+    let work_width = work_area.size.width as f64 / scale_factor;
+    let work_height = work_area.size.height as f64 / scale_factor;
+    let window_width = size.width as f64 / scale_factor;
+    let window_height = size.height as f64 / scale_factor;
+    let target_y = work_y + work_height / 2.0 - answer_center_y;
+    let min_y = work_y;
+    let max_y = work_y + (work_height - window_height).max(0.0);
+    let new_y = target_y.clamp(min_y, max_y);
+    let current_x = position.x as f64 / scale_factor;
+    let min_x = work_x;
+    let max_x = work_x + (work_width - window_width).max(0.0);
+    let new_x = current_x.clamp(min_x, max_x);
+
+    window
+        .set_position(LogicalPosition::new(new_x, new_y))
+        .map_err(|error| format!("移动主窗口失败: {error}"))
 }
 
 #[tauri::command]
@@ -688,6 +727,7 @@ pub fn run() {
             get_appearance_settings,
             save_appearance_settings,
             resize_main_window,
+            center_main_window_on_answer,
             close_current_window,
             hide_main_window,
             open_settings_window

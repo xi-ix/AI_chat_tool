@@ -107,7 +107,7 @@ function clampNumber(value: number, min: number, max: number, fallback: number) 
 function applyAppearance(settings: AppearanceResponse) {
   currentAppearance = {
     window_width: clampNumber(settings.window_width, 480, 980, 720),
-    answer_max_height: clampNumber(settings.answer_max_height, 240, 720, 520),
+    answer_max_height: clampNumber(settings.answer_max_height, 240, 1400, 520),
   };
 
   document.documentElement.style.setProperty(
@@ -305,9 +305,21 @@ function resizeWindow() {
   requestAnimationFrame(() => {
     const height = Math.min(
       Math.max(document.documentElement.scrollHeight + 12, 140),
-      760,
+      currentAppearance.answer_max_height + 220,
     );
     void invoke("resize_main_window", { height });
+  });
+}
+
+function centerWindowOnAnswer() {
+  if (isSettingsWindow || !panel || panel.hidden) return;
+
+  requestAnimationFrame(() => {
+    const rect = panel.getBoundingClientRect();
+    const answerCenterY = rect.top + rect.height / 2;
+    void invoke("center_main_window_on_answer", {
+      answerCenterY,
+    });
   });
 }
 
@@ -319,6 +331,9 @@ function setPanelState(question: string, status: string, answer = "") {
   statusText.textContent = status;
   answerText.innerHTML = answer ? renderMarkdown(answer) : "";
   resizeWindow();
+  if (answer) {
+    window.setTimeout(centerWindowOnAnswer, 80);
+  }
 }
 
 function showSettingsPage(page: "api" | "shortcut" | "prompt" | "appearance") {
@@ -526,7 +541,7 @@ appearanceSettingsForm?.addEventListener("submit", async (event) => {
 
   const settings = {
     window_width: clampNumber(Number(windowWidthInput.value), 480, 980, 720),
-    answer_max_height: clampNumber(Number(answerMaxHeightInput.value), 240, 720, 520),
+    answer_max_height: clampNumber(Number(answerMaxHeightInput.value), 240, 1400, 520),
   };
 
   appearanceSettingsStatus.textContent = "保存中...";

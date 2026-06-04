@@ -4,6 +4,6 @@
   "hide_dock_icon": false,
   "launch_at_login": false,
   "show_menu_bar_icon": true,
-  "window_width": 760.0,
-  "answer_max_height": 540.0
+  "window_width": 700.0,
+  "answer_max_height": 1000.0
 }
