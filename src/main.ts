@@ -200,6 +200,44 @@ function renderMarkdown(markdown: string) {
     listItems = [];
   }
 
+  function readBlockMath(
+    index: number,
+    openMarker: string,
+    closeMarker: string,
+  ): { content: string; nextIndex: number } | null {
+    const trimmed = lines[index].trim();
+    if (!trimmed.startsWith(openMarker)) return null;
+
+    const mathLines: string[] = [];
+    let current = trimmed.slice(openMarker.length);
+
+    if (current.endsWith(closeMarker) && current.length > closeMarker.length) {
+      return {
+        content: current.slice(0, -closeMarker.length),
+        nextIndex: index,
+      };
+    }
+
+    if (current) mathLines.push(current);
+
+    for (let nextIndex = index + 1; nextIndex < lines.length; nextIndex++) {
+      const nextLine = lines[nextIndex];
+      const closeIndex = nextLine.lastIndexOf(closeMarker);
+
+      if (closeIndex >= 0) {
+        mathLines.push(nextLine.slice(0, closeIndex));
+        return {
+          content: mathLines.join("\n"),
+          nextIndex,
+        };
+      }
+
+      mathLines.push(nextLine);
+    }
+
+    return null;
+  }
+
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
     if (line.trim().startsWith("```")) {
@@ -221,38 +259,16 @@ function renderMarkdown(markdown: string) {
     }
 
     const trimmed = line.trim();
-    if (trimmed.startsWith("$$")) {
+    const blockMath =
+      readBlockMath(index, "$$", "$$") ?? readBlockMath(index, "\\[", "\\]");
+
+    if (blockMath) {
       flushParagraph();
       flushList();
-      const mathLines: string[] = [];
-      let current = trimmed.slice(2);
-      let closed = false;
-
-      if (current.endsWith("$$") && current.length > 2) {
-        mathLines.push(current.slice(0, -2));
-        closed = true;
-      } else {
-        if (current) mathLines.push(current);
-        while (index + 1 < lines.length) {
-          index += 1;
-          const nextLine = lines[index];
-          const nextTrimmed = nextLine.trim();
-          if (nextTrimmed.endsWith("$$")) {
-            mathLines.push(nextLine.slice(0, nextLine.lastIndexOf("$$")));
-            closed = true;
-            break;
-          }
-          mathLines.push(nextLine);
-        }
-      }
-
-      if (closed) {
-        html.push(
-          `<div class="math-block">${renderMathExpression(mathLines.join("\n"), true)}</div>`,
-        );
-      } else {
-        paragraph.push(trimmed);
-      }
+      html.push(
+        `<div class="math-block">${renderMathExpression(blockMath.content, true)}</div>`,
+      );
+      index = blockMath.nextIndex;
       continue;
     }
 
