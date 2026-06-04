@@ -3,5 +3,7 @@
   "prompt": "用简洁的中文回答我的问题",
   "hide_dock_icon": false,
   "launch_at_login": false,
-  "show_menu_bar_icon": true
+  "show_menu_bar_icon": true,
+  "window_width": 760.0,
+  "answer_max_height": 540.0
 }

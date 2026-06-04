@@ -1,4 +1,6 @@
 :root {
+  --app-width: 720px;
+  --answer-max-height: 520px;
   color: #1f2937;
   background: transparent;
   font-family:
@@ -27,7 +29,7 @@ body {
 }
 
 .app-shell {
-  width: min(100%, 620px);
+  width: min(100%, var(--app-width));
   padding: 8px;
   border: 1px solid rgba(203, 213, 225, 0.82);
   border-radius: 12px;
@@ -77,7 +79,7 @@ body {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: none;
-  max-height: 590px;
+  max-height: min(62vh, var(--answer-max-height));
   overflow: auto;
 }
 
@@ -105,11 +107,91 @@ body {
 .answer-text {
   margin: 0;
   color: #111827;
-  white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;
   font-size: 15px;
   line-height: 1.65;
+}
+
+.answer-text :first-child {
+  margin-top: 0;
+}
+
+.answer-text :last-child {
+  margin-bottom: 0;
+}
+
+.answer-text p {
+  margin: 0 0 10px;
+}
+
+.answer-text h3,
+.answer-text h4,
+.answer-text h5 {
+  margin: 14px 0 8px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.answer-text ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.answer-text li {
+  margin: 3px 0;
+}
+
+.answer-text a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.answer-text a:hover {
+  text-decoration: underline;
+}
+
+.answer-text code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.answer-text pre {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+  overflow: auto;
+}
+
+.answer-text pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.math-block {
+  margin: 10px 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.answer-text .katex-display {
+  margin: 0;
+}
+
+.answer-text .katex {
+  font-size: 1.02em;
 }
 
 .icon-button {
@@ -161,7 +243,7 @@ body {
 
 .settings-switcher {
   display: inline-grid;
-  grid-template-columns: repeat(3, max-content);
+  grid-template-columns: repeat(4, max-content);
   gap: 4px;
   margin: 12px 18px 0;
   padding: 3px;

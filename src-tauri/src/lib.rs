@@ -8,6 +8,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tauri::{
+    Emitter,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
@@ -36,6 +37,10 @@ struct AppSettings {
     launch_at_login: bool,
     #[serde(default)]
     show_menu_bar_icon: bool,
+    #[serde(default = "default_window_width")]
+    window_width: f64,
+    #[serde(default = "default_answer_max_height")]
+    answer_max_height: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +90,20 @@ struct PromptResponse {
 }
 
 #[derive(Debug, Deserialize)]
+struct SaveAppearanceRequest {
+    #[serde(rename = "window_width")]
+    window_width: f64,
+    #[serde(rename = "answer_max_height")]
+    answer_max_height: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct AppearanceResponse {
+    window_width: f64,
+    answer_max_height: f64,
+}
+
+#[derive(Debug, Deserialize)]
 struct ChatCompletionResponse {
     choices: Vec<Choice>,
 }
@@ -121,6 +140,14 @@ fn default_model() -> String {
 
 fn default_global_shortcut() -> String {
     "CommandOrControl+Shift+Space".to_string()
+}
+
+fn default_window_width() -> f64 {
+    720.0
+}
+
+fn default_answer_max_height() -> f64 {
+    520.0
 }
 
 fn app_config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -245,6 +272,8 @@ fn load_app_settings(app: &tauri::AppHandle) -> Result<AppSettings, String> {
         hide_dock_icon: false,
         launch_at_login: false,
         show_menu_bar_icon: false,
+        window_width: default_window_width(),
+        answer_max_height: default_answer_max_height(),
     })
 }
 
@@ -272,7 +301,10 @@ fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
 
     window.show().map_err(|error| format!("显示主窗口失败: {error}"))?;
     window.unminimize().map_err(|error| format!("取消最小化失败: {error}"))?;
-    window.set_focus().map_err(|error| format!("聚焦主窗口失败: {error}"))
+    window.set_focus().map_err(|error| format!("聚焦主窗口失败: {error}"))?;
+    window
+        .emit("main-window-shown", ())
+        .map_err(|error| format!("通知主窗口聚焦输入框失败: {error}"))
 }
 
 fn apply_dock_visibility(app: &tauri::AppHandle, hide_dock_icon: bool) -> Result<(), String> {
@@ -437,6 +469,8 @@ fn save_shortcut_settings(
             hide_dock_icon: settings.hide_dock_icon,
             launch_at_login: settings.launch_at_login,
             show_menu_bar_icon: settings.show_menu_bar_icon,
+            window_width: current.window_width,
+            answer_max_height: current.answer_max_height,
         },
     )
 }
@@ -461,19 +495,56 @@ fn save_prompt_settings(app: tauri::AppHandle, settings: SavePromptRequest) -> R
             hide_dock_icon: current.hide_dock_icon,
             launch_at_login: current.launch_at_login,
             show_menu_bar_icon: current.show_menu_bar_icon,
+            window_width: current.window_width,
+            answer_max_height: current.answer_max_height,
+        },
+    )
+}
+
+#[tauri::command]
+fn get_appearance_settings(app: tauri::AppHandle) -> Result<AppearanceResponse, String> {
+    let settings = load_app_settings(&app)?;
+
+    Ok(AppearanceResponse {
+        window_width: settings.window_width,
+        answer_max_height: settings.answer_max_height,
+    })
+}
+
+#[tauri::command]
+fn save_appearance_settings(
+    app: tauri::AppHandle,
+    settings: SaveAppearanceRequest,
+) -> Result<(), String> {
+    let current = load_app_settings(&app)?;
+    let window_width = settings.window_width.clamp(480.0, 980.0);
+    let answer_max_height = settings.answer_max_height.clamp(240.0, 720.0);
+
+    save_app_settings(
+        &app,
+        &AppSettings {
+            global_shortcut: current.global_shortcut,
+            prompt: current.prompt,
+            hide_dock_icon: current.hide_dock_icon,
+            launch_at_login: current.launch_at_login,
+            show_menu_bar_icon: current.show_menu_bar_icon,
+            window_width,
+            answer_max_height,
         },
     )
 }
 
 #[tauri::command]
 fn resize_main_window(app: tauri::AppHandle, height: f64) -> Result<(), String> {
+    let settings = load_app_settings(&app)?;
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;
     let height = height.clamp(140.0, 760.0);
+    let width = settings.window_width.clamp(480.0, 980.0);
 
     window
-        .set_size(tauri::LogicalSize::new(640.0, height))
+        .set_size(tauri::LogicalSize::new(width, height))
         .map_err(|error| format!("调整窗口大小失败: {error}"))
 }
 
@@ -614,6 +685,8 @@ pub fn run() {
             save_shortcut_settings,
             get_prompt_settings,
             save_prompt_settings,
+            get_appearance_settings,
+            save_appearance_settings,
             resize_main_window,
             close_current_window,
             hide_main_window,
