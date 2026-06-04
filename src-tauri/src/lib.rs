@@ -1,3 +1,4 @@
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -104,16 +105,6 @@ struct AppearanceResponse {
     answer_max_height: f64,
 }
 
-#[derive(Debug, Deserialize)]
-struct ChatCompletionResponse {
-    choices: Vec<Choice>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Choice {
-    message: Message,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 struct Message {
     role: String,
@@ -121,14 +112,33 @@ struct Message {
 }
 
 #[derive(Debug, Serialize)]
-struct AskResponse {
-    answer: String,
-}
-
-#[derive(Debug, Serialize)]
 struct ChatCompletionRequest {
     model: String,
     messages: Vec<Message>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    stream: bool,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct ChatStreamEvent {
+    request_id: u64,
+    kind: String,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatStreamChunk {
+    choices: Vec<ChatStreamChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatStreamChoice {
+    delta: ChatStreamDelta,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatStreamDelta {
+    content: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -295,6 +305,21 @@ fn save_app_settings(app: &tauri::AppHandle, settings: &AppSettings) -> Result<(
         .map_err(|error| format!("保存快捷键配置失败: {error}"))
 }
 
+fn center_main_window(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "找不到主窗口".to_string())?;
+    let settings = load_app_settings(app)?;
+
+    window
+        .set_size(tauri::LogicalSize::new(
+            settings.window_width.clamp(480.0, 980.0),
+            140.0,
+        ))
+        .map_err(|error| format!("调整主窗口大小失败: {error}"))?;
+    window.center().map_err(|error| format!("居中主窗口失败: {error}"))
+}
+
 fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
@@ -302,6 +327,7 @@ fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
 
     window.show().map_err(|error| format!("显示主窗口失败: {error}"))?;
     window.unminimize().map_err(|error| format!("取消最小化失败: {error}"))?;
+    center_main_window(app)?;
     window.set_focus().map_err(|error| format!("聚焦主窗口失败: {error}"))?;
     window
         .emit("main-window-shown", ())
@@ -349,7 +375,35 @@ fn register_global_shortcut(app: &tauri::AppHandle, shortcut: &str) -> Result<()
 }
 
 #[tauri::command]
-async fn ask_question(app: tauri::AppHandle, question: String) -> Result<AskResponse, String> {
+fn ask_question_stream(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    request_id: u64,
+    question: String,
+) -> Result<(), String> {
+    let error_window = window.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = run_question_stream(app, window, request_id, question).await {
+            let _ = error_window.emit(
+                "chat-stream",
+                ChatStreamEvent {
+                    request_id,
+                    kind: "error".to_string(),
+                    content: error,
+                },
+            );
+        }
+    });
+
+    Ok(())
+}
+
+async fn run_question_stream(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    request_id: u64,
+    question: String,
+) -> Result<(), String> {
     let question = question.trim();
     if question.is_empty() {
         return Err("问题不能为空".to_string());
@@ -377,6 +431,7 @@ async fn ask_question(app: tauri::AppHandle, question: String) -> Result<AskResp
     let request = ChatCompletionRequest {
         model: config.model,
         messages,
+        stream: true,
     };
 
     let client = reqwest::Client::builder()
@@ -386,6 +441,8 @@ async fn ask_question(app: tauri::AppHandle, question: String) -> Result<AskResp
 
     let response = client
         .post(url)
+        .header("accept", "text/event-stream")
+        .header("cache-control", "no-cache")
         .bearer_auth(config.api_key)
         .json(&request)
         .send()
@@ -398,20 +455,70 @@ async fn ask_question(app: tauri::AppHandle, question: String) -> Result<AskResp
         return Err(format!("API 返回错误 {status}: {body}"));
     }
 
-    let response_body = response
-        .json::<ChatCompletionResponse>()
-        .await
-        .map_err(|error| format!("解析 API 响应失败: {error}"))?;
+    let mut buffer = String::new();
+    let mut stream = response.bytes_stream();
 
-    let answer = response_body
-        .choices
-        .into_iter()
-        .next()
-        .map(|choice| choice.message.content)
-        .filter(|content| !content.trim().is_empty())
-        .ok_or_else(|| "API 没有返回答案".to_string())?;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| format!("读取 API 流失败: {error}"))?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
 
-    Ok(AskResponse { answer })
+        while let Some(line_end) = buffer.find('\n') {
+            let line = buffer[..line_end].trim().to_string();
+            buffer = buffer[line_end + 1..].to_string();
+
+            if !line.starts_with("data:") {
+                continue;
+            }
+
+            let data = line.trim_start_matches("data:").trim();
+            if data == "[DONE]" {
+                window
+                    .emit(
+                        "chat-stream",
+                        ChatStreamEvent {
+                            request_id,
+                            kind: "done".to_string(),
+                            content: String::new(),
+                        },
+                    )
+                    .map_err(|error| format!("发送流式完成事件失败: {error}"))?;
+                return Ok(());
+            }
+
+            let parsed = serde_json::from_str::<ChatStreamChunk>(data)
+                .map_err(|error| format!("解析流式响应失败: {error}"))?;
+            for choice in parsed.choices {
+                if let Some(content) = choice.delta.content {
+                    if content.is_empty() {
+                        continue;
+                    }
+                    window
+                        .emit(
+                            "chat-stream",
+                            ChatStreamEvent {
+                                request_id,
+                                kind: "delta".to_string(),
+                                content,
+                            },
+                        )
+                        .map_err(|error| format!("发送流式内容事件失败: {error}"))?;
+                }
+            }
+        }
+    }
+
+    window
+        .emit(
+            "chat-stream",
+            ChatStreamEvent {
+                request_id,
+                kind: "done".to_string(),
+                content: String::new(),
+            },
+        )
+        .map_err(|error| format!("发送流式完成事件失败: {error}"))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -602,6 +709,11 @@ fn hide_main_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn reset_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    center_main_window(&app)
+}
+
+#[tauri::command]
 fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("settings") {
         window.show().map_err(|error| format!("显示设置窗口失败: {error}"))?;
@@ -717,7 +829,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            ask_question,
+            ask_question_stream,
             get_config,
             save_config,
             get_shortcut_settings,
@@ -730,6 +842,7 @@ pub fn run() {
             center_main_window_on_answer,
             close_current_window,
             hide_main_window,
+            reset_main_window,
             open_settings_window
         ])
         .run(tauri::generate_context!())

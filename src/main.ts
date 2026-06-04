@@ -68,10 +68,6 @@ const appearanceSettingsStatus = document.querySelector<HTMLElement>(
 
 const isSettingsWindow = window.location.hash === "#settings";
 
-type AskResponse = {
-  answer: string;
-};
-
 type ConfigResponse = {
   api_key_set: boolean;
   base_url: string;
@@ -94,10 +90,19 @@ type AppearanceResponse = {
   answer_max_height: number;
 };
 
+type ChatStreamEvent = {
+  request_id: number;
+  kind: "delta" | "done" | "error";
+  content: string;
+};
+
 let currentAppearance: AppearanceResponse = {
   window_width: 720,
   answer_max_height: 520,
 };
+let currentRequestId = 0;
+let currentAnswer = "";
+let centerTimer: number | undefined;
 
 function clampNumber(value: number, min: number, max: number, fallback: number) {
   if (!Number.isFinite(value)) return fallback;
@@ -128,6 +133,19 @@ function focusQuestionInput() {
     input.focus();
     input.select();
   });
+}
+
+function resetChatView() {
+  currentRequestId += 1;
+  currentAnswer = "";
+
+  if (panel) panel.hidden = true;
+  if (questionText) questionText.textContent = "";
+  if (statusText) statusText.textContent = "";
+  if (answerText) answerText.innerHTML = "";
+  if (input) input.value = "";
+
+  focusQuestionInput();
 }
 
 function escapeHtml(value: string) {
@@ -339,6 +357,14 @@ function centerWindowOnAnswer() {
   });
 }
 
+function scheduleCenterWindowOnAnswer() {
+  if (centerTimer !== undefined) {
+    window.clearTimeout(centerTimer);
+  }
+
+  centerTimer = window.setTimeout(centerWindowOnAnswer, 60);
+}
+
 function setPanelState(question: string, status: string, answer = "") {
   if (!panel || !questionText || !statusText || !answerText) return;
 
@@ -348,8 +374,18 @@ function setPanelState(question: string, status: string, answer = "") {
   answerText.innerHTML = answer ? renderMarkdown(answer) : "";
   resizeWindow();
   if (answer) {
-    window.setTimeout(centerWindowOnAnswer, 80);
+    scheduleCenterWindowOnAnswer();
   }
+}
+
+function appendStreamAnswer(content: string) {
+  if (!answerText || !statusText) return;
+
+  currentAnswer += content;
+  statusText.textContent = "";
+  answerText.innerHTML = renderMarkdown(currentAnswer);
+  resizeWindow();
+  scheduleCenterWindowOnAnswer();
 }
 
 function showSettingsPage(page: "api" | "shortcut" | "prompt" | "appearance") {
@@ -580,15 +616,19 @@ form?.addEventListener("submit", async (event) => {
   const question = input?.value.trim();
   if (!question) return;
 
+  currentRequestId += 1;
+  const requestId = currentRequestId;
+  currentAnswer = "";
   if (input) input.value = "";
   setPanelState(question, "思考中...");
 
-  try {
-    const response = await invoke<AskResponse>("ask_question", { question });
-    setPanelState(question, "", response.answer);
-  } catch (error) {
+  void invoke("ask_question_stream", {
+    requestId,
+    question,
+  }).catch((error) => {
+    if (requestId !== currentRequestId) return;
     setPanelState(question, "请求失败", String(error));
-  }
+  });
 });
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -605,7 +645,22 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   void loadAppearanceSettings();
-  void listen("main-window-shown", focusQuestionInput);
+  void listen("chat-stream", (event) => {
+    const payload = event.payload as ChatStreamEvent;
+    if (payload.request_id !== currentRequestId) return;
+
+    if (payload.kind === "delta") {
+      appendStreamAnswer(payload.content);
+    } else if (payload.kind === "done" && statusText) {
+      statusText.textContent = "";
+      scheduleCenterWindowOnAnswer();
+    } else if (payload.kind === "error") {
+      setPanelState(questionText?.textContent ?? "", "请求失败", payload.content);
+    }
+  });
+  void listen("main-window-shown", () => {
+    resetChatView();
+  });
   focusQuestionInput();
   resizeWindow();
 });
