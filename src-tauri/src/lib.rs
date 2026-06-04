@@ -9,11 +9,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tauri::{
-    Emitter,
-    LogicalPosition,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, LogicalPosition, Manager,
 };
 use tauri_plugin_autostart::ManagerExt as AutostartExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -43,6 +41,10 @@ struct AppSettings {
     window_width: f64,
     #[serde(default = "default_answer_max_height")]
     answer_max_height: f64,
+    #[serde(default = "default_window_position")]
+    window_position: f64,
+    #[serde(default = "default_window_horizontal_position")]
+    window_horizontal_position: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,12 +99,18 @@ struct SaveAppearanceRequest {
     window_width: f64,
     #[serde(rename = "answer_max_height")]
     answer_max_height: f64,
+    #[serde(rename = "window_position")]
+    window_position: f64,
+    #[serde(rename = "window_horizontal_position")]
+    window_horizontal_position: f64,
 }
 
 #[derive(Debug, Serialize)]
 struct AppearanceResponse {
     window_width: f64,
     answer_max_height: f64,
+    window_position: f64,
+    window_horizontal_position: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -159,6 +167,14 @@ fn default_window_width() -> f64 {
 
 fn default_answer_max_height() -> f64 {
     520.0
+}
+
+fn default_window_position() -> f64 {
+    50.0
+}
+
+fn default_window_horizontal_position() -> f64 {
+    50.0
 }
 
 fn app_config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -285,6 +301,8 @@ fn load_app_settings(app: &tauri::AppHandle) -> Result<AppSettings, String> {
         show_menu_bar_icon: false,
         window_width: default_window_width(),
         answer_max_height: default_answer_max_height(),
+        window_position: default_window_position(),
+        window_horizontal_position: default_window_horizontal_position(),
     })
 }
 
@@ -301,11 +319,10 @@ fn save_app_settings(app: &tauri::AppHandle, settings: &AppSettings) -> Result<(
     let content = serde_json::to_string_pretty(settings)
         .map_err(|error| format!("序列化快捷键配置失败: {error}"))?;
 
-    fs::write(path, format!("{content}\n"))
-        .map_err(|error| format!("保存快捷键配置失败: {error}"))
+    fs::write(path, format!("{content}\n")).map_err(|error| format!("保存快捷键配置失败: {error}"))
 }
 
-fn center_main_window(app: &tauri::AppHandle) -> Result<(), String> {
+fn position_main_window(app: &tauri::AppHandle, anchor_y: f64) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;
@@ -317,7 +334,12 @@ fn center_main_window(app: &tauri::AppHandle) -> Result<(), String> {
             140.0,
         ))
         .map_err(|error| format!("调整主窗口大小失败: {error}"))?;
-    window.center().map_err(|error| format!("居中主窗口失败: {error}"))
+    position_window_by_anchor(
+        &window,
+        &settings,
+        anchor_y,
+        Some((settings.window_width.clamp(480.0, 980.0), 140.0)),
+    )
 }
 
 fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
@@ -325,10 +347,16 @@ fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;
 
-    window.show().map_err(|error| format!("显示主窗口失败: {error}"))?;
-    window.unminimize().map_err(|error| format!("取消最小化失败: {error}"))?;
-    center_main_window(app)?;
-    window.set_focus().map_err(|error| format!("聚焦主窗口失败: {error}"))?;
+    window
+        .show()
+        .map_err(|error| format!("显示主窗口失败: {error}"))?;
+    window
+        .unminimize()
+        .map_err(|error| format!("取消最小化失败: {error}"))?;
+    position_main_window(app, 70.0)?;
+    window
+        .set_focus()
+        .map_err(|error| format!("聚焦主窗口失败: {error}"))?;
     window
         .emit("main-window-shown", ())
         .map_err(|error| format!("通知主窗口聚焦输入框失败: {error}"))
@@ -410,10 +438,7 @@ async fn run_question_stream(
     }
 
     let config = load_config(&app)?;
-    let url = format!(
-        "{}/chat/completions",
-        config.base_url.trim_end_matches('/')
-    );
+    let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
 
     let settings = load_app_settings(&app)?;
     let mut messages = Vec::new();
@@ -579,6 +604,8 @@ fn save_shortcut_settings(
             show_menu_bar_icon: settings.show_menu_bar_icon,
             window_width: current.window_width,
             answer_max_height: current.answer_max_height,
+            window_position: current.window_position,
+            window_horizontal_position: current.window_horizontal_position,
         },
     )
 }
@@ -605,6 +632,8 @@ fn save_prompt_settings(app: tauri::AppHandle, settings: SavePromptRequest) -> R
             show_menu_bar_icon: current.show_menu_bar_icon,
             window_width: current.window_width,
             answer_max_height: current.answer_max_height,
+            window_position: current.window_position,
+            window_horizontal_position: current.window_horizontal_position,
         },
     )
 }
@@ -616,6 +645,8 @@ fn get_appearance_settings(app: tauri::AppHandle) -> Result<AppearanceResponse, 
     Ok(AppearanceResponse {
         window_width: settings.window_width,
         answer_max_height: settings.answer_max_height,
+        window_position: settings.window_position,
+        window_horizontal_position: settings.window_horizontal_position,
     })
 }
 
@@ -627,6 +658,8 @@ fn save_appearance_settings(
     let current = load_app_settings(&app)?;
     let window_width = settings.window_width.clamp(480.0, 980.0);
     let answer_max_height = settings.answer_max_height.clamp(240.0, 1400.0);
+    let window_position = settings.window_position.clamp(0.0, 100.0);
+    let window_horizontal_position = settings.window_horizontal_position.clamp(0.0, 100.0);
 
     save_app_settings(
         &app,
@@ -638,6 +671,8 @@ fn save_appearance_settings(
             show_menu_bar_icon: current.show_menu_bar_icon,
             window_width,
             answer_max_height,
+            window_position,
+            window_horizontal_position,
         },
     )
 }
@@ -657,15 +692,13 @@ fn resize_main_window(app: tauri::AppHandle, height: f64) -> Result<(), String> 
         .map_err(|error| format!("调整窗口大小失败: {error}"))
 }
 
-#[tauri::command]
-fn center_main_window_on_answer(app: tauri::AppHandle, answer_center_y: f64) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "找不到主窗口".to_string())?;
+fn position_window_by_anchor(
+    window: &tauri::WebviewWindow,
+    settings: &AppSettings,
+    anchor_y: f64,
+    expected_size: Option<(f64, f64)>,
+) -> Result<(), String> {
     let scale_factor = window.scale_factor().unwrap_or(1.0);
-    let position = window
-        .outer_position()
-        .map_err(|error| format!("读取窗口位置失败: {error}"))?;
     let size = window
         .outer_size()
         .map_err(|error| format!("读取窗口大小失败: {error}"))?;
@@ -678,16 +711,21 @@ fn center_main_window_on_answer(app: tauri::AppHandle, answer_center_y: f64) -> 
     let work_y = work_area.position.y as f64 / scale_factor;
     let work_width = work_area.size.width as f64 / scale_factor;
     let work_height = work_area.size.height as f64 / scale_factor;
-    let window_width = size.width as f64 / scale_factor;
-    let window_height = size.height as f64 / scale_factor;
-    let target_y = work_y + work_height / 2.0 - answer_center_y;
+    let (window_width, window_height) = expected_size.unwrap_or((
+        size.width as f64 / scale_factor,
+        size.height as f64 / scale_factor,
+    ));
+    let top_preference = settings.window_position.clamp(0.0, 100.0) / 100.0;
+    let anchor_target_y = work_y + (1.0 - top_preference) * work_height;
+    let target_y = anchor_target_y - anchor_y;
     let min_y = work_y;
     let max_y = work_y + (work_height - window_height).max(0.0);
     let new_y = target_y.clamp(min_y, max_y);
-    let current_x = position.x as f64 / scale_factor;
     let min_x = work_x;
     let max_x = work_x + (work_width - window_width).max(0.0);
-    let new_x = current_x.clamp(min_x, max_x);
+    let right_preference = settings.window_horizontal_position.clamp(0.0, 100.0) / 100.0;
+    let new_x =
+        (work_x + right_preference * (work_width - window_width).max(0.0)).clamp(min_x, max_x);
 
     window
         .set_position(LogicalPosition::new(new_x, new_y))
@@ -695,8 +733,23 @@ fn center_main_window_on_answer(app: tauri::AppHandle, answer_center_y: f64) -> 
 }
 
 #[tauri::command]
+fn position_main_window_on_answer(
+    app: tauri::AppHandle,
+    answer_center_y: f64,
+) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "找不到主窗口".to_string())?;
+    let settings = load_app_settings(&app)?;
+
+    position_window_by_anchor(&window, &settings, answer_center_y, None)
+}
+
+#[tauri::command]
 fn close_current_window(window: tauri::WebviewWindow) -> Result<(), String> {
-    window.close().map_err(|error| format!("关闭窗口失败: {error}"))
+    window
+        .close()
+        .map_err(|error| format!("关闭窗口失败: {error}"))
 }
 
 #[tauri::command]
@@ -705,19 +758,25 @@ fn hide_main_window(app: tauri::AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or_else(|| "找不到主窗口".to_string())?;
 
-    window.hide().map_err(|error| format!("隐藏主窗口失败: {error}"))
+    window
+        .hide()
+        .map_err(|error| format!("隐藏主窗口失败: {error}"))
 }
 
 #[tauri::command]
 fn reset_main_window(app: tauri::AppHandle) -> Result<(), String> {
-    center_main_window(&app)
+    position_main_window(&app, 70.0)
 }
 
 #[tauri::command]
 fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("settings") {
-        window.show().map_err(|error| format!("显示设置窗口失败: {error}"))?;
-        window.set_focus().map_err(|error| format!("聚焦设置窗口失败: {error}"))?;
+        window
+            .show()
+            .map_err(|error| format!("显示设置窗口失败: {error}"))?;
+        window
+            .set_focus()
+            .map_err(|error| format!("聚焦设置窗口失败: {error}"))?;
         return Ok(());
     }
 
@@ -825,6 +884,7 @@ pub fn run() {
             apply_dock_visibility(app.handle(), settings.hide_dock_icon)?;
             apply_autostart(app.handle(), settings.launch_at_login)?;
             apply_menu_bar_icon(app.handle(), settings.show_menu_bar_icon)?;
+            position_main_window(app.handle(), 70.0)?;
 
             Ok(())
         })
@@ -839,7 +899,7 @@ pub fn run() {
             get_appearance_settings,
             save_appearance_settings,
             resize_main_window,
-            center_main_window_on_answer,
+            position_main_window_on_answer,
             close_current_window,
             hide_main_window,
             reset_main_window,

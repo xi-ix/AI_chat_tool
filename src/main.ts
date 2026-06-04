@@ -57,6 +57,12 @@ const windowWidthInput = document.querySelector<HTMLInputElement>("#window-width
 const answerMaxHeightInput = document.querySelector<HTMLInputElement>(
   "#answer-max-height-input",
 );
+const windowPositionInput = document.querySelector<HTMLInputElement>(
+  "#window-position-input",
+);
+const windowHorizontalPositionInput = document.querySelector<HTMLInputElement>(
+  "#window-horizontal-position-input",
+);
 const apiSettingsStatus = document.querySelector<HTMLElement>("#api-settings-status");
 const shortcutSettingsStatus = document.querySelector<HTMLElement>(
   "#shortcut-settings-status",
@@ -88,6 +94,8 @@ type PromptResponse = {
 type AppearanceResponse = {
   window_width: number;
   answer_max_height: number;
+  window_position: number;
+  window_horizontal_position: number;
 };
 
 type ChatStreamEvent = {
@@ -99,6 +107,8 @@ type ChatStreamEvent = {
 let currentAppearance: AppearanceResponse = {
   window_width: 720,
   answer_max_height: 520,
+  window_position: 50,
+  window_horizontal_position: 50,
 };
 let currentRequestId = 0;
 let currentAnswer = "";
@@ -113,6 +123,13 @@ function applyAppearance(settings: AppearanceResponse) {
   currentAppearance = {
     window_width: clampNumber(settings.window_width, 480, 980, 720),
     answer_max_height: clampNumber(settings.answer_max_height, 240, 1400, 520),
+    window_position: clampNumber(settings.window_position, 0, 100, 50),
+    window_horizontal_position: clampNumber(
+      settings.window_horizontal_position,
+      0,
+      100,
+      50,
+    ),
   };
 
   document.documentElement.style.setProperty(
@@ -341,7 +358,11 @@ function resizeWindow() {
       Math.max(document.documentElement.scrollHeight + 12, 140),
       currentAppearance.answer_max_height + 220,
     );
-    void invoke("resize_main_window", { height });
+    void invoke("resize_main_window", { height }).then(() => {
+      if (!panel || panel.hidden) {
+        void invoke("reset_main_window");
+      }
+    });
   });
 }
 
@@ -351,7 +372,7 @@ function centerWindowOnAnswer() {
   requestAnimationFrame(() => {
     const rect = panel.getBoundingClientRect();
     const answerCenterY = rect.top + rect.height / 2;
-    void invoke("center_main_window_on_answer", {
+    void invoke("position_main_window_on_answer", {
       answerCenterY,
     });
   });
@@ -468,12 +489,26 @@ async function loadAppearanceSettings() {
     const settings = await invoke<AppearanceResponse>("get_appearance_settings");
     applyAppearance(settings);
   } catch {
-    applyAppearance({ window_width: 720, answer_max_height: 520 });
+    applyAppearance({
+      window_width: 720,
+      answer_max_height: 520,
+      window_position: 50,
+      window_horizontal_position: 50,
+    });
   }
 
-  if (windowWidthInput && answerMaxHeightInput) {
+  if (
+    windowWidthInput &&
+    answerMaxHeightInput &&
+    windowPositionInput &&
+    windowHorizontalPositionInput
+  ) {
     windowWidthInput.value = String(currentAppearance.window_width);
     answerMaxHeightInput.value = String(currentAppearance.answer_max_height);
+    windowPositionInput.value = String(currentAppearance.window_position);
+    windowHorizontalPositionInput.value = String(
+      currentAppearance.window_horizontal_position,
+    );
   }
 }
 
@@ -589,11 +624,26 @@ promptSettingsForm?.addEventListener("submit", async (event) => {
 appearanceSettingsForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  if (!windowWidthInput || !answerMaxHeightInput || !appearanceSettingsStatus) return;
+  if (
+    !windowWidthInput ||
+    !answerMaxHeightInput ||
+    !windowPositionInput ||
+    !windowHorizontalPositionInput ||
+    !appearanceSettingsStatus
+  ) {
+    return;
+  }
 
   const settings = {
     window_width: clampNumber(Number(windowWidthInput.value), 480, 980, 720),
     answer_max_height: clampNumber(Number(answerMaxHeightInput.value), 240, 1400, 520),
+    window_position: clampNumber(Number(windowPositionInput.value), 0, 100, 50),
+    window_horizontal_position: clampNumber(
+      Number(windowHorizontalPositionInput.value),
+      0,
+      100,
+      50,
+    ),
   };
 
   appearanceSettingsStatus.textContent = "保存中...";
@@ -603,6 +653,10 @@ appearanceSettingsForm?.addEventListener("submit", async (event) => {
     applyAppearance(settings);
     windowWidthInput.value = String(currentAppearance.window_width);
     answerMaxHeightInput.value = String(currentAppearance.answer_max_height);
+    windowPositionInput.value = String(currentAppearance.window_position);
+    windowHorizontalPositionInput.value = String(
+      currentAppearance.window_horizontal_position,
+    );
     appearanceSettingsStatus.textContent = "已保存";
     setTimeout(closeWindow, 250);
   } catch (error) {
@@ -660,6 +714,7 @@ window.addEventListener("DOMContentLoaded", () => {
   });
   void listen("main-window-shown", () => {
     resetChatView();
+    void invoke("reset_main_window");
   });
   focusQuestionInput();
   resizeWindow();

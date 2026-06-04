@@ -5,5 +5,7 @@
   "launch_at_login": false,
   "show_menu_bar_icon": true,
   "window_width": 700.0,
-  "answer_max_height": 1000.0
+  "answer_max_height": 1000.0,
+  "window_position": 58.0,
+  "window_horizontal_position": 47.0
 }
